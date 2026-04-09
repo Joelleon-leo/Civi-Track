@@ -8,5 +8,6 @@ router.post('/', authenticateToken, upload.array('images', 5), complaintsControl
 router.get('/', authenticateToken, complaintsController.getComplaints);
 router.get('/:id', authenticateToken, complaintsController.getComplaintById);
 router.patch('/:id/status', authenticateToken, authorizeRole('authority'), complaintsController.updateStatus);
+router.patch('/:id/resolved-picture', authenticateToken, authorizeRole('authority'), upload.single('resolved_picture'), complaintsController.uploadResolvedPicture);
 
 module.exports = router;

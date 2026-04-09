@@ -33,11 +33,57 @@ export const AuthProvider = ({ children }) => {
     setUser(res.data.user);
   };
 
-  const register = async (name, email, password, role) => {
-    const res = await api.post('/auth/register', { name, email, password, role });
+  const register = async (name, email, password, role, profilePictureFormData = null) => {
+    let formData;
+    if (profilePictureFormData) {
+      formData = profilePictureFormData;
+      formData.append('name', name);
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('role', role);
+    } else {
+      formData = new FormData();
+      formData.append('name', name);
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('role', role);
+    }
+
+    const res = await api.post('/auth/register', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     await AsyncStorage.setItem('token', res.data.token);
     await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
     setUser(res.data.user);
+  };
+
+  const updateProfile = async (userData, profilePictureFormData = null) => {
+    let formData;
+    if (profilePictureFormData) {
+      formData = profilePictureFormData;
+      if (userData.name) {
+        formData.append('name', userData.name);
+      }
+    } else {
+      formData = new FormData();
+      if (userData.name) {
+        formData.append('name', userData.name);
+      }
+    }
+
+    const res = await api.patch('/auth/profile', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
+    setUser(res.data.user);
+    return res.data;
+  };
+
+  const getProfile = async () => {
+    const res = await api.get('/auth/profile');
+    await AsyncStorage.setItem('user', JSON.stringify(res.data));
+    setUser(res.data);
+    return res.data;
   };
 
   const logout = async () => {
@@ -47,8 +93,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, updateProfile, getProfile }}>
       {children}
     </AuthContext.Provider>
   );
 };
+

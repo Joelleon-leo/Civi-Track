@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useContext } from 'react';
+import { View, Text, ActivityIndicator, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../src/api/axios';
+import { AuthContext } from '../../src/context/AuthContext';
+import { toMediaUrl } from '../../src/api/axios';
 
 export default function ComplaintDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useContext(AuthContext);
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -24,8 +27,12 @@ export default function ComplaintDetailScreen() {
     }
   };
 
+
   if (loading) return <ActivityIndicator size="large" className="flex-1" />;
   if (!complaint) return <View className="flex-1 justify-center items-center"><Text>Not found</Text></View>;
+
+  const canShowResolutionSection =
+    complaint.status === 'Resolved' || !!complaint.resolved_picture_url;
 
   return (
     <ScrollView className="flex-1 bg-slate-50">
@@ -42,6 +49,13 @@ export default function ComplaintDetailScreen() {
           <Text className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-xs font-bold">
             {complaint.department}
           </Text>
+          <Text className={`px-3 py-1 rounded-full text-xs font-bold ${
+            complaint.status === 'Resolved' ? 'bg-green-100 text-green-800' :
+            complaint.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+            'bg-gray-100 text-gray-800'
+          }`}>
+            {complaint.status}
+          </Text>
         </View>
         <Text className="text-gray-700 text-base leading-relaxed mb-4">{complaint.description}</Text>
         
@@ -50,6 +64,62 @@ export default function ComplaintDetailScreen() {
             <Text className="font-semibold text-gray-800">{complaint.reporter_name}</Text>
         </View>
       </View>
+
+      {/* Complaint Images Section */}
+      {complaint.images && complaint.images.length > 0 && (
+        <View className="p-6">
+          <Text className="text-xl font-bold text-gray-900 mb-4">Complaint Photos</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="space-x-4">
+            {complaint.images.map((imageUrl, index) => (
+              <View key={index} className="mr-4">
+                <View className="w-48 h-48 rounded-2xl overflow-hidden bg-white">
+                  <Image
+                    source={{ uri: toMediaUrl(imageUrl) }}
+                    className="w-full h-full"
+                    resizeMode="cover"
+                  />
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Resolved Picture Section */}
+      {canShowResolutionSection && (
+        <View className="p-6">
+          <Text className="text-xl font-bold text-gray-900 mb-4">Resolution</Text>
+          {complaint.resolved_picture_url ? (
+            <View className="bg-white rounded-2xl p-4 shadow-sm">
+              <View className="w-full h-64 rounded-xl overflow-hidden bg-white mb-4">
+                <Image
+                  source={{ uri: toMediaUrl(complaint.resolved_picture_url) }}
+                  className="w-full h-full"
+                  resizeMode="contain"
+                />
+              </View>
+              {(complaint.resolved_by_name || complaint.resolved_by) && (
+                <Text className="text-sm text-gray-600">
+                  Resolved by: <Text className="font-semibold">{complaint.resolved_by_name || complaint.resolved_by}</Text>
+                </Text>
+              )}
+              {complaint.resolved_at && (
+                <Text className="text-sm text-gray-600 mt-1">
+                  {new Date(complaint.resolved_at).toLocaleString()}
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View className="bg-white rounded-2xl p-4 shadow-sm">
+              <Text className="text-gray-600 text-center">
+                {user?.role === 'authority'
+                  ? 'Upload the resolution photo from the Update screen.'
+                  : 'Awaiting resolution photo from admin'}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       <View className="p-6">
         <Text className="text-xl font-bold text-gray-900 mb-4">Status Timeline</Text>

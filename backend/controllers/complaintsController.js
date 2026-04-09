@@ -1,4 +1,16 @@
 const pool = require('../config/db');
+const fs = require('fs');
+const path = require('path');
+
+const uploadsDir = path.join(__dirname, '../uploads');
+
+const safeUnlink = async (filePath) => {
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (err) {
+    // ignore missing files and other unlink errors
+  }
+};
 
 const getDepartment = (category) => {
   const mapping = {
@@ -44,6 +56,12 @@ exports.createComplaint = async (req, res) => {
     const duplicateMatch = await pool.query(duplicateQuery, [category, lat, lng, searchTitle]);
 
     if (duplicateMatch.rows.length > 0) {
+      // Multer already stored uploaded files on disk; clean them up since we won't persist them.
+      const files = req.files || [];
+      await Promise.all(
+        files.map((file) => safeUnlink(path.join(uploadsDir, file.filename)))
+      );
+
       const existing = duplicateMatch.rows[0];
       // Increment support count
       const updated = await pool.query(
@@ -109,9 +127,20 @@ exports.getComplaints = async (req, res) => {
   try {
     const { category, status } = req.query;
     let query = `
-      SELECT c.*, u.name as reporter_name 
+      SELECT c.*, 
+             u.name as reporter_name,
+             u.profile_picture_url as reporter_profile_picture,
+             auth.name as resolved_by_name,
+             (
+               SELECT ci.image_url
+               FROM Complaint_Images ci
+               WHERE ci.complaint_id = c.id
+               ORDER BY ci.id ASC
+               LIMIT 1
+             ) as primary_image_url
       FROM Complaints c
       JOIN Users u ON c.user_id = u.id
+      LEFT JOIN Users auth ON c.resolved_by = auth.id
       WHERE 1=1
     `;
     const params = [];
@@ -148,9 +177,13 @@ exports.getComplaintById = async (req, res) => {
   const { id } = req.params;
   try {
     const complaintRes = await pool.query(`
-      SELECT c.*, u.name as reporter_name 
+      SELECT c.*, 
+             u.name as reporter_name,
+             u.profile_picture_url as reporter_profile_picture,
+             auth.name as resolved_by_name
       FROM Complaints c
       JOIN Users u ON c.user_id = u.id
+      LEFT JOIN Users auth ON c.resolved_by = auth.id
       WHERE c.id = $1
     `, [id]);
 
@@ -213,6 +246,66 @@ exports.updateStatus = async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Update status error', err);
     res.status(500).json({ error: 'Server error updating status' });
+  } finally {
+    client.release();
+  }
+};
+
+exports.uploadResolvedPicture = async (req, res) => {
+  const { id } = req.params;
+  const user_id = req.user.id;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No image file provided' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Verify complaint exists
+    const complaintRes = await client.query(
+      'SELECT * FROM Complaints WHERE id = $1',
+      [id]
+    );
+
+    if (complaintRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      await safeUnlink(path.join(uploadsDir, req.file.filename));
+      return res.status(404).json({ error: 'Complaint not found' });
+    }
+
+    const existingResolvedUrl = complaintRes.rows[0].resolved_picture_url;
+
+    const resolved_picture_url = `/uploads/${req.file.filename}`;
+
+    // Update complaint with resolved picture
+    const updateRes = await client.query(
+      "UPDATE Complaints SET resolved_picture_url = $1, resolved_by = $2, resolved_at = CURRENT_TIMESTAMP, status = 'Resolved' WHERE id = $3 RETURNING *",
+      [resolved_picture_url, user_id, id]
+    );
+
+    await client.query(
+      `INSERT INTO Status_Logs (complaint_id, status, note, updated_by) VALUES ($1, $2, $3, $4)`,
+      [id, 'Resolved', 'Resolved picture uploaded', user_id]
+    );
+
+    await client.query('COMMIT');
+
+    // If this replaces a previous resolved picture, delete the old file from disk.
+    if (existingResolvedUrl && existingResolvedUrl !== resolved_picture_url) {
+      const oldName = path.basename(existingResolvedUrl);
+      await safeUnlink(path.join(uploadsDir, oldName));
+    }
+
+    res.json({ 
+      message: 'Resolved picture uploaded successfully',
+      complaint: updateRes.rows[0]
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Upload resolved picture error', err);
+    res.status(500).json({ error: 'Server error uploading resolved picture' });
   } finally {
     client.release();
   }

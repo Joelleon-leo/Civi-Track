@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import api from '../src/api/axios';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function CreateComplaintScreen() {
   const [title, setTitle] = useState('');
@@ -9,11 +10,69 @@ export default function CreateComplaintScreen() {
   const [category, setCategory] = useState('Sanitation');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
+  const [complaintImage, setComplaintImage] = useState(null);
   const router = useRouter();
 
-  const handleSubmit = async () => {
-    // For simplicity, skip images, but map lat/lng
+  const buildUploadFile = (uri, prefix) => {
+    const match = uri?.match(/\.([a-zA-Z0-9]+)(?:\?.*)?$/);
+    const ext = (match?.[1] || 'jpg').toLowerCase();
+    const type =
+      ext === 'png' ? 'image/png' :
+      ext === 'heic' ? 'image/heic' :
+      ext === 'webp' ? 'image/webp' :
+      'image/jpeg';
+    return {
+      uri,
+      type,
+      name: `${prefix}_${Date.now()}.${ext}`,
+    };
+  };
+
+  const pickComplaintImage = async () => {
     try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        setComplaintImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to select image');
+    }
+  };
+
+  const captureComplaintImage = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to capture an image.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        setComplaintImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to capture image');
+    }
+  };
+
+  const handleSubmit = async () => {
+    try {
+      if (!complaintImage) {
+        Alert.alert('Picture Required', 'Please add a complaint picture before submitting.');
+        return;
+      }
+
       // Dummy lat/long for now if Map is hard to setup on web/emulator right away
       const formData = new FormData();
       formData.append('title', title);
@@ -21,6 +80,9 @@ export default function CreateComplaintScreen() {
       formData.append('category', category);
       formData.append('latitude', latitude || '12.9716');
       formData.append('longitude', longitude || '77.5946');
+      formData.append('images', {
+        ...buildUploadFile(complaintImage, 'complaint'),
+      });
       
       const res = await api.post('/complaints', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -66,6 +128,35 @@ export default function CreateComplaintScreen() {
             multiline
             textAlignVertical="top"
           />
+        </View>
+
+        <View>
+          <Text className="text-gray-700 font-semibold mb-2">Complaint Picture</Text>
+          <View className="flex-row">
+            <TouchableOpacity
+              className="flex-1 bg-white px-4 py-3 rounded-xl border border-gray-200 mr-2"
+              onPress={pickComplaintImage}
+            >
+              <Text className="text-blue-600 font-semibold text-center">Select Image</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="flex-1 bg-white px-4 py-3 rounded-xl border border-gray-200 ml-2"
+              onPress={captureComplaintImage}
+            >
+              <Text className="text-blue-600 font-semibold text-center">Capture Image</Text>
+            </TouchableOpacity>
+          </View>
+          {complaintImage ? (
+            <View className="w-full h-48 rounded-xl mt-3 overflow-hidden bg-white">
+              <Image
+                source={{ uri: complaintImage }}
+                className="w-full h-full"
+                resizeMode="cover"
+              />
+            </View>
+          ) : (
+            <Text className="text-gray-500 text-sm mt-2">Add a clear photo of the issue.</Text>
+          )}
         </View>
         
         <View>

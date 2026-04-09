@@ -6,8 +6,12 @@ CREATE TABLE IF NOT EXISTS Users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(50) CHECK (role IN ('student', 'authority')) DEFAULT 'student',
+    profile_picture_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE Users
+    ADD COLUMN IF NOT EXISTS profile_picture_url TEXT;
 
 CREATE TABLE IF NOT EXISTS Complaints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -20,8 +24,16 @@ CREATE TABLE IF NOT EXISTS Complaints (
     department VARCHAR(100),
     support_count INT DEFAULT 1,
     user_id UUID REFERENCES Users(id) ON DELETE CASCADE,
+    resolved_picture_url TEXT,
+    resolved_by UUID REFERENCES Users(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE Complaints
+    ADD COLUMN IF NOT EXISTS resolved_picture_url TEXT,
+    ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES Users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS Complaint_Images (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

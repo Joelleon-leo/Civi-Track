@@ -1,0 +1,24 @@
+{
+  // Avoid showing TypeScript project diagnostics from dependency packages.
+  // (Your app sources are in mobile/, backend/; dependencies can ship incomplete tsconfigs.)
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+  "typescript.tsserver.exclude": [
+    "**/node_modules/**"
+  ],
+  "javascript.tsserver.exclude": [
+    "**/node_modules/**"
+  ],
+
+  // Reduce accidental navigation into dependency sources.
+  "files.exclude": {
+    "**/node_modules": true
+  },
+  "search.exclude": {
+    "**/node_modules": true
+  },
+
+  // Also keep watchers lighter on Windows.
+  "files.watcherExclude": {
+    "**/node_modules/**": true
+  }
+}

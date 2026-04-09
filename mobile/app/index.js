@@ -1,8 +1,9 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Image, Platform } from 'react-native';
 import { AuthContext } from '../src/context/AuthContext';
 import { useRouter } from 'expo-router';
 import api from '../src/api/axios';
+import { toMediaUrl } from '../src/api/axios';
 
 export default function HomeScreen() {
   const { user, loading: authLoading, logout } = useContext(AuthContext);
@@ -45,15 +46,37 @@ export default function HomeScreen() {
   if (!user) return null;
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <SafeAreaView className="flex-1 bg-slate-50" style={{ flex: 1, minHeight: Platform.OS === 'web' ? '100vh' : undefined }}>
       <View className="p-6 bg-white border-b border-gray-200 flex-row justify-between items-center">
-        <View>
+        <View className="flex-1">
           <Text className="text-xl font-bold text-gray-900">Hi, {user.name}</Text>
           <Text className="text-sm text-gray-500">CiviTrack Campus</Text>
         </View>
-        <TouchableOpacity onPress={logout} className="bg-gray-100 px-4 py-2 rounded-lg">
-          <Text className="text-gray-700 font-semibold">Logout</Text>
-        </TouchableOpacity>
+        <View className="flex-row items-center">
+          <TouchableOpacity
+            className="mr-3 bg-gray-100 px-3 py-2 rounded-lg"
+            onPress={logout}
+          >
+            <Text className="text-gray-700 font-semibold">Logout</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="items-center"
+            onPress={() => router.push('/profile')}
+          >
+            {user.profile_picture_url ? (
+              <Image
+                source={{ uri: toMediaUrl(user.profile_picture_url) }}
+                className="w-12 h-12 rounded-full"
+              />
+            ) : (
+              <View className="w-12 h-12 rounded-full bg-blue-600 items-center justify-center">
+                <Text className="text-white font-bold text-lg">
+                  {user.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {user.role === 'authority' && (
@@ -66,7 +89,8 @@ export default function HomeScreen() {
       )}
 
       <FlatList
-        className="flex-1 px-4 py-2"
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, paddingBottom: 140, flexGrow: 1 }}
         data={complaints}
         keyExtractor={(item) => item.id}
         refreshing={loading}
@@ -106,8 +130,11 @@ export default function HomeScreen() {
       />
 
       {user.role === 'student' && (
-        <View className="p-4 bg-white border-t border-gray-200">
-          <TouchableOpacity 
+        <View
+          className="bg-white border-t border-gray-200"
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16 }}
+        >
+          <TouchableOpacity
             className="bg-blue-600 p-4 rounded-xl items-center shadow-md"
             onPress={() => router.push('/create-complaint')}
           >
